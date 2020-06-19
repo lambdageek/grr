@@ -1,0 +1,66 @@
+#! /bin/bash
+
+function print_usage () {
+    echo "usage: $0 [-n] COMMAND [ARGS...]"
+    echo "	Runs COMMAND from the toplevel directory of the current git repository"
+    echo "	-n: Don't run, just print the full path of the command"
+    exit 1
+}
+if [[ $# -lt 1 ]]; then
+    print_usage;
+fi
+
+declare dry_run
+
+
+if [[ z"$1" == "z-n" ]]; then
+    shift;
+    dry_run=1
+fi
+
+if [[ $# -lt 1 ]]; then
+    print_usage;
+fi
+
+# install with
+#   source /dev/stdin <<<"$(cat <(${HOME}/tools/bin/grr --bash-complete))"
+function shell_complete () {
+    cat - <<'EOF'
+function _grr_completion () {
+    if [[ "${#COMP_WORDS[@]}" -ne 2 ]] ; then
+	return;
+    fi
+    local d=$(git rev-parse --show-toplevel)
+    if [[ $? -ne 0 ]] ; then
+	return;
+    fi
+    local w=$(find "$d" -type f -perm +a+x -maxdepth 1)
+    local -a g=($(compgen -W "$w" "${COMP_WORDS[1]}"))
+    if [[ "${#g[@]}" -eq 0 ]] ; then
+	g+=($(cd "$d" && compgen -A file -o nospace "${COMP_WORDS[1]}"))
+    fi
+    COMPREPLY+=(${g[@]})
+}
+complete -F _grr_completion -o bashdefault -o default -o nospace grr
+EOF
+}
+
+if [[ z$1 == z"--bash-complete" ]]; then
+    shell_complete
+exit 0
+fi
+
+p=$1
+shift
+
+d=`git rev-parse --show-toplevel`
+if [[ $? -ne 0 ]]; then
+   exit 1
+fi
+
+if [[ z"${dry_run}" = z1 ]]; then
+    echo "${d}/${p}" "$@"
+else
+    echo Running "${d}/${p}" "$@"
+    exec "${d}/${p}" "$@"
+fi
